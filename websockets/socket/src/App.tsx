@@ -1,80 +1,84 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import WebWorker from "./WebWorker";
 import worker from "./app.worker";
+
 function App() {
+  const WS_URL = "wss://stream.bybit.com/contract/usdt/public/v3";
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [msg, setMsg] = useState<string>("");
   const [allMsg, setAllMsg] = useState<string[]>([]);
 
-  const webWorker = new WebWorker(worker);
+  const webWorker = useRef(new WebWorker(worker)).current;
+  const [start, setStart] = useState<number>(0);
+  const [end, setEnd] = useState<number>(10000);
+  const [bg, setBg] = useState<number>(0);
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      const reply = e.data;
+      console.log(`Answer from worker: ${reply}`);
+    };
+
+    webWorker.addEventListener("message", handleMessage);
+
+    return () => {
+      webWorker.removeEventListener("message", handleMessage);
+    };
+  }, [webWorker]);
 
   const startConnection = () => {
-    const ws = new WebSocket(`ws://localhost:1234`);
-    setWs(ws);
-    ws.onopen = () => {
-      console.log("Connection Established!!");
+    const wsInstance = new WebSocket(WS_URL);
+    wsInstance.onopen = () => {
+      console.log("Connected!");
     };
-    ws.onmessage = (event) => {
-      console.log(`Client received data as: ${event.data}`);
+    wsInstance.onmessage = (e) => {
+      console.log("Data: ", e.data);
+      setAllMsg((prevAllMsg) => [...prevAllMsg, e.data]);
     };
+    setWs(wsInstance);
   };
 
   const endConnection = () => {
     if (ws) {
       ws.close();
+      setWs(null);
     }
   };
 
   const handleSend = () => {
     const dataToSend = {
       message: msg,
-      time: Date(),
+      time: new Date().toString(),
     };
 
     const jsonMsg = JSON.stringify(dataToSend);
 
-    if (ws && ws.readyState === WebSocket.OPEN && msg.length != 0) {
+    if (ws && ws.readyState === WebSocket.OPEN && msg.length !== 0) {
       ws.send(jsonMsg);
       setMsg("");
       setAllMsg((prevAllMsg) => [...prevAllMsg, msg]);
-    } else if (msg.length == 0) {
-      console.error("Msg length cant be zero!");
+    } else if (msg.length === 0) {
+      console.error("Msg length can't be zero!");
     } else {
       console.error("WebSocket connection is not open.");
     }
   };
 
-  useEffect(() => {
-    console.log(bg);
-    console.log(bgs[bg]);
-  });
-
-  const bgs = ["red", "blue", "green"];
-  const [start, setStart] = useState<number>(0);
-  const [end, setEnd] = useState<number>(10000);
-  const [bg, setBg] = useState<number>(0);
-
   const add = () => {
     webWorker.postMessage({ start, end, type: "add" });
     console.log(`Working on addition from ${start} to ${end}`);
-
-    webWorker.addEventListener("message", (e) => {
-      const reply = e.data;
-      console.log(`Answer for the addition is: ${reply}`);
-    });
   };
+
   const subtract = () => {
     webWorker.postMessage({ start, end, type: "subtract" });
     console.log(`Working on subtraction from ${end} to ${start}`);
+  };
 
-    webWorker.addEventListener("message", (e) => {
-      const reply = e.data;
-      console.log(`Answer for the subtraction is: ${reply}`);
-    });
-  };
   const changeBg = () => {
-    setBg((bg + 1) % bgs.length);
+    setBg((prevBg) => (prevBg + 1) % bgs.length);
   };
+
+  const bgs = ["bg-red-500", "bg-blue-500", "bg-green-500"];
 
   return (
     <>
@@ -110,15 +114,17 @@ function App() {
         <div className="flex flex-col gap-4">
           <p className="text-lg">All Messages</p>
           <ol className="flex flex-col">
-            {allMsg.map((m) => (
-              <li className="text-md">{m}</li>
+            {allMsg.map((m, index) => (
+              <li key={index} className="text-md">{m}</li>
             ))}
           </ol>
         </div>
       </div>
       <hr />
-      <div className={`${bgs[bg]}-200 w-full p-10`}>
-        <p className="w-full text-center text-2xl font-bold">Demonstration of Web Workers</p>
+      <div className={`${bgs[bg]} w-full p-10`}>
+        <p className="w-full text-center text-2xl font-bold">
+          Demonstration of Web Workers
+        </p>
         <div className="flex flex-col justify-center items-center gap-10 max-w-64">
           <button
             onClick={add}
